@@ -3,7 +3,7 @@ set -euo pipefail
 umask 077
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
-ip=${1:?Indica l'indirizzo IPv4 LAN di ZimaOS}
+ip=${1:?Specificare IPv4 LAN di ZimaOS}
 radar_env=${2:-/DATA/AppData/StreamRadar-IT/.env}
 config=.env.prova
 
