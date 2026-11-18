@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101112">
+  <meta name="description" content="Cerca film, serie e anime e scopri dove sono disponibili in Italia.">
+  <title>StreamRadar IT</title>
+  <link rel="icon" href="./favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" sizes="180x180">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="/suite.css">
+  <script src="./app.js" type="module"></script>
+</head>
+<body>
+  <nav class="suite-nav" aria-label="StreamSuite">
+    <a href="/">Home</a><a href="/radar/" aria-current="page">StreamRadar IT</a><a href="/manager/">Local Stream Manager</a>
+  </nav>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="brand" href="./" aria-label="StreamRadar IT, home"><span class="brand-icon" aria-hidden="true"></span>StreamRadar<span class="brand-country">IT</span></a>
+      <span class="territory"><span aria-hidden="true"></span>Catalogo Italia</span>
+    </div>
+  </header>
+  <main class="shell">
+    <section class="intro" aria-labelledby="intro-title">
+      <h1 id="intro-title">Novità in <em>streaming</em></h1>
+      <div class="search" role="search">
+        <label class="sr-only" for="query">Cerca un titolo</label>
+        <span class="search-icon" aria-hidden="true"></span>
+        <input id="query" type="search" maxlength="120" autocomplete="off" placeholder="Cerca un film, una serie o un anime…">
+        <button id="clear" class="clear" type="button" aria-label="Cancella la ricerca" hidden>×</button>
+      </div>
+    </section>
+    <section class="discovery" id="discovery" aria-label="Esplora i cataloghi italiani">
+      <div class="categories" id="modes" role="group" aria-label="Sezione">
+        <button type="button" data-mode="new" aria-pressed="true">Novità</button>
+        <button type="button" data-mode="explore" aria-pressed="false">Esplora cataloghi</button>
+        <button type="button" data-mode="catalog" aria-pressed="false">Aggiunti al catalogo</button>
+        <button type="button" data-mode="top" aria-pressed="false">Tendenze</button>
+      </div>
+      <div class="catalog-filters">
+        <label>Piattaforma
+          <select id="platform">
+            <option value="">Tutte le piattaforme</option>
+            <option value="netflix">Netflix</option>
+            <option value="prime">Prime Video</option>
+            <option value="hbo">HBO Max</option>
+            <option value="apple">Apple TV</option>
+            <option value="disney">Disney+</option>
+            <option value="paramount">Paramount+</option>
+            <option value="crunchyroll">Crunchyroll</option>
+          </select>
+        </label>
+        <label id="period-filter">Periodo
+          <select id="period"><option value="7">Ultimi 7 giorni</option><option value="30">Ultimi 30 giorni</option></select>
+        </label>
+        <label id="item-filter">Tipo di aggiunta
+          <select id="item-type"><option value="all">Titoli, stagioni ed episodi</option><option value="show">Titoli</option><option value="season">Stagioni</option><option value="episode">Episodi</option></select>
+        </label>
+        <label data-explore-filter hidden>Ordina per
+          <select id="explore-sort"><option value="popular">Popolarità</option><option value="rated">Più apprezzati</option><option value="newest">Uscita più recente</option></select>
+        </label>
+        <label data-explore-filter hidden>Anno di uscita
+          <select id="explore-era"><option value="all">Tutti gli anni</option><option value="2020s">Anni 2020</option><option value="2010s">Anni 2010</option><option value="2000s">Anni 2000</option><option value="1990s">Anni 90</option><option value="1980s">Anni 80</option><option value="classics">Prima del 1980</option></select>
+        </label>
+        <label data-explore-filter hidden>Disponibilità
+          <select id="explore-offers"><option value="included">Abbonamento o gratis</option><option value="all">Anche noleggio e acquisto</option></select>
+        </label>
+      </div>
+    </section>
+    <div class="catalog-filters format-filters">
+      <div id="categories" class="categories" role="group" aria-label="Formato">
+        <button type="button" data-category="all" aria-pressed="true">Tutti</button>
+        <button type="button" data-category="movie" aria-pressed="false">Film</button>
+        <button type="button" data-category="tv" aria-pressed="false">Serie TV</button>
+        <button type="button" data-category="animation" aria-pressed="false">Animazione / Cartoni</button>
+        <button type="button" data-category="documentary" aria-pressed="false">Documentari</button>
+      </div>
+      <label>Genere
+        <select id="genre">
+          <option value="all">Tutti i generi</option><option value="crime">Crime</option><option value="true-crime">True Crime</option>
+          <option value="science-fiction">Fantascienza</option><option value="adventure">Avventura</option><option value="action">Azione</option>
+          <option value="thriller">Thriller</option><option value="mystery">Mistero</option><option value="horror">Horror</option>
+          <option value="fantasy">Fantasy</option><option value="comedy">Commedia</option><option value="drama">Drammatico</option>
+          <option value="documentary">Documentari</option><option value="family">Famiglia</option>
+        </select>
+      </label>
+    </div>
+    <section class="catalog" aria-labelledby="section-title">
+      <h2 id="section-title">Novità in Italia</h2>
+      <p id="description" class="description">Film recenti e novità delle serie in Italia.</p>
+      <p id="source-links" class="description"><a id="timeline-link" href="https://www.justwatch.com/it/novit%C3%A0" target="_blank" rel="noopener noreferrer">Novità di oggi su JustWatch ↗</a><a href="https://www.justwatch.com/it/streaming-charts" target="_blank" rel="noopener noreferrer">Classifica italiana su JustWatch ↗</a></p>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <button id="explore-genre" class="action" type="button" hidden></button>
+      <button id="retry" class="action" type="button" hidden>Riprova</button>
+      <ul id="catalog" class="catalog-grid"></ul>
+      <button id="more" class="action more" type="button" hidden>Altri risultati</button>
+      <noscript>Attiva JavaScript per cercare i titoli e consultare il catalogo.</noscript>
+    </section>
+  </main>
+  <footer class="shell credits" aria-label="Crediti e fonti">
+    <a href="https://www.themoviedb.org/" aria-label="The Movie Database">
+      <img width="48" height="35" alt="TMDB" src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_2-d537fb228cf3ded904ef09b136fe3fec72548ebc1fea3fbbd1ad9e36364db38b.svg">
+    </a>
+    <div><p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+    <p>Novità e classifiche per piattaforma da <a href="https://www.movieofthenight.com/">Movie of the Night</a> · Disponibilità da <a href="https://www.justwatch.com/it">JustWatch</a> · Voti aggregati da <a href="https://www.omdbapi.com/">OMDb</a></p></div>
+  </footer>
+  <dialog id="detail" aria-labelledby="detail-title">
+    <button id="close" type="button" class="close" aria-label="Chiudi scheda" autofocus>×</button>
+    <div id="detail-content"></div>
+  </dialog>
+</body>
+</html>

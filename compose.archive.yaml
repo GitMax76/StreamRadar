@@ -1,0 +1,8 @@
+services:
+  manager:
+    volumes:
+      - type: bind
+        source: "${LSM_ARCHIVE_PATH:?Imposta LSM_ARCHIVE_PATH nel file .env}"
+        target: /archive
+        bind:
+          create_host_path: false

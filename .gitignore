@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+downloads/
+__pycache__/
+*.py[cod]
+node_modules/
+*.log
+*.zip

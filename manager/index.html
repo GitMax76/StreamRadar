@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local Stream Manager</title>
+<link rel="icon" type="image/png" href="./favicon.png">
+<link rel="stylesheet" href="/suite.css">
+<style>
+  :root {
+    color-scheme: dark;
+    font-family: Inter, system-ui, sans-serif;
+    color: #f2edff;
+    background: #130f24;
+    --muted: #c3b7db;
+    --edge: #44365e;
+    --mint: #89efda;
+    --lilac: #c4afff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(ellipse at top right, #402561, transparent 55%), #130f24; }
+  main { width: min(1160px, calc(100% - 32px)); margin: auto; padding: clamp(22px, 5vw, 54px) 0; }
+  header, .brand, .section-head, .job-head, .metrics {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  header { margin-bottom: 22px; flex-wrap: wrap; }
+  .brand { justify-content: flex-start; }
+  .mark { flex: none; border-radius: 14px; box-shadow: 0 4px 24px #9e73ff45; }
+  h1, h2, p { margin: 0; }
+  h1 { font-size: clamp(1.3rem, 4vw, 2.2rem); letter-spacing: -.045em; }
+  h2 { font-size: 1.05rem; }
+  .panel { background: #211831; border: 1px solid var(--edge); border-radius: 18px;
+    padding: clamp(14px, 3vw, 24px); margin-bottom: 16px; }
+  main > .panel { background: linear-gradient(120deg, #302044, #211831 68%); border-top-color: #8064b2; }
+  .workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, 30%);
+    gap: 18px; align-items: start; }
+  form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+    gap: 12px; align-items: end; margin-top: 16px; }
+  label { display: grid; gap: 6px; font-size: .88rem; }
+  input, textarea, select, button { min-height: 44px; border-radius: 9px; padding: 9px 12px; font: inherit; }
+  input, textarea, select { width: 100%; background: #181126; border: 1px solid #645480; color: inherit; }
+  #toon-catalog { min-width: 0; border: 1px solid #53436f; border-radius: 9px; }
+  #toon-catalog label { display: flex; align-items: center; gap: 10px; min-height: 42px; }
+  #toon-catalog input { width: 19px; min-height: 19px; flex: 0 0 19px; accent-color: #9ce8da; }
+  #toon-episodes { max-height: 45vh; overflow-y: auto; }
+  .destination { margin-top: 16px; max-width: 310px; }
+  .duplicate-paths { padding-left: 1.3rem; margin: .5rem 0; color: #ffdaab; font-size: .85rem; overflow-wrap: anywhere; }
+  button { background: var(--mint); color: #102e2b; border: 0; font-weight: 700; cursor: pointer;
+    transition: background-color 160ms, transform 160ms; }
+  button:hover:enabled { transform: translateY(-1px); filter: brightness(1.12); }
+  button:disabled { opacity: .6; cursor: wait; }
+  :focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  #connection, .summary, .metrics, .empty, #message, .file-path { color: var(--muted); font-size: .875rem; }
+  #maintenance { margin-top:14px; color:var(--muted); overflow-wrap:anywhere; }
+  #maintenance p, #maintenance button { margin-top:8px; }
+  #maintenance summary { cursor:pointer; color:var(--lilac); }
+  #import-links { margin-top:14px; }
+  #import-links summary { color:var(--lilac); cursor:pointer; }
+  #import-links textarea { min-height:96px; resize:vertical; }
+  #import-links button { justify-self:start; }
+  #message:not(:empty), #action-message:not(:empty) { margin-top: 12px; }
+  ul { list-style: none; margin: 12px 0 0; padding: 0; }
+  .job, .file, .empty { padding: 13px 0; border-top: 1px solid var(--edge); overflow-wrap: anywhere; }
+  .job[data-state="Download"] { border: 1px solid #537a78; border-left: 3px solid var(--mint);
+    background: #233039; border-radius: 12px; padding: 14px; margin: 7px 0; }
+  .job-head { align-items: flex-start; }
+  .job-title { font-weight: 650; }
+  .status { font-size: .77rem; padding: 4px 8px; border-radius: 99px; background: #392950;
+    color: #e8dcff; white-space: nowrap; }
+  .status[data-kind="Download"] { background: #164b47; color: #b2ffeb; }
+  .status[data-kind="Download"]::before { content: ''; display: inline-block; width: 6px; height: 6px;
+    margin-right: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.8s ease-in-out infinite;
+    animation-delay: var(--pulse-offset, 0s); }
+  .status[data-kind="Completato"] { background: #173d36; color: #a3efcd; }
+  .status[data-kind="In pausa"], .status[data-kind="Già esistente"] { background: #4b3523; color: #ffdaab; }
+  .status[data-kind="Errore"] { background: #582c46; color: #ffc4df; }
+  progress { appearance: none; display: block; width: 100%; height: 10px; margin: 12px 0 8px;
+    border: 0; border-radius: 99px; background: #403452; accent-color: var(--mint); overflow: hidden; }
+  progress::-webkit-progress-bar { background: #403452; border-radius: 99px; }
+  progress::-webkit-progress-value { background: linear-gradient(90deg, #a796ff, #89efda); border-radius: 99px; }
+  progress::-moz-progress-bar { background: linear-gradient(90deg, #a796ff, #89efda); border-radius: 99px; }
+  progress:indeterminate { background: repeating-linear-gradient(120deg, #423758 0 12px, #6d5893 12px 24px);
+    animation: stripes .9s linear infinite; animation-delay: var(--pulse-offset, 0s); }
+  progress:indeterminate::-webkit-progress-bar { background: transparent; }
+  .metrics { flex-wrap: wrap; justify-content: flex-start; font-variant-numeric: tabular-nums; }
+  .metrics strong { color: var(--mint); }
+  .actions, .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .actions button, .filters button { min-height: 38px; padding: 5px 10px; font-size: .82rem;
+    border: 1px solid #645480; background: #302442; color: #f5efff; }
+  .filters button[aria-pressed=true] { background: var(--lilac); color: #211338; border-color: transparent; }
+  #up-next { display:flex; gap:10px; flex-wrap:wrap; align-items:baseline; margin:0 0 16px;
+    padding:12px 16px; border:1px solid #675285; border-radius:12px; background:#2a1e3d;
+    overflow-wrap:anywhere; }
+  #up-next[hidden] { display:none; }
+  #up-next strong { color:var(--lilac); }
+  .job[data-new=true] { outline:2px solid var(--lilac); outline-offset:-2px; padding-inline:10px; border-radius:10px; }
+  .file-path { display: block; margin-top: 8px; overflow-wrap: anywhere; }
+  .error, #action-message { color: #ffc4df; font-size: .875rem; margin-top: 8px; }
+  @keyframes pulse { 50% { opacity: .42; } }
+  @keyframes stripes { to { background-position: 28px 0; } }
+  .now { display:grid; grid-template-columns: auto minmax(0,1fr); gap:clamp(15px,3vw,36px);
+    align-items:center; margin-bottom:16px; background:linear-gradient(120deg,#352259,#211831 70%);
+    border-color:#7755a7; }
+  .now[hidden] { display:none; }
+  @property --amount { syntax: "<percentage>"; initial-value: 0%; inherits: false; }
+  .dial { --amount:0%; transition:--amount 380ms ease-out; width:clamp(78px,14vw,138px); aspect-ratio:1; border-radius:50%;
+    display:grid; place-items:center; position:relative; isolation:isolate;
+    background:conic-gradient(#89efda var(--amount),#4e386e 0); }
+  .dial::before { content:''; position:absolute; inset:7px; border-radius:50%; background:#241936; z-index:-1; }
+  .dial[data-busy=true] { background:conic-gradient(#4e386e 65%,#89efda); }
+  .dial[data-busy=true]::after { content:''; position:absolute; inset:0; border-radius:inherit;
+    border:3px solid transparent; border-top-color:#ff885a; animation:orbit 1.4s linear infinite; }
+  .dial strong { font-size:clamp(.85rem,3vw,1.7rem); font-variant-numeric:tabular-nums; }
+  .now h2 { font-size:clamp(1rem,2.4vw,1.55rem); overflow-wrap:anywhere; margin:.4rem 0; }
+  #now-state { color:#a5f4e5; font-size:.82rem; }
+  #now-metrics { display:flex; gap:8px 18px; flex-wrap:wrap; color:#dbcfee; font-size:.9rem; }
+  .now[data-state=Completato] { border-color:#56937e; }
+  .now[data-state=Errore] { border-color:#ad6487; }
+  .now[data-state=Completato] .dial strong { animation:confirm .45s ease-out both; color:#89efda; }
+  @keyframes confirm { 50% { transform:scale(1.22); } }
+  @keyframes orbit { to { transform:rotate(360deg); } }
+  @media (max-width: 850px) { .workspace { grid-template-columns: 1fr; gap: 0; } }
+  @media (max-width: 720px) { form { grid-template-columns: 1fr; } .section-head { flex-wrap: wrap; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<nav class="suite-nav" aria-label="StreamSuite">
+  <a href="/">Home</a><a href="/radar/">StreamRadar IT</a><a href="/manager/" aria-current="page">Local Stream Manager</a>
+</nav>
+<main>
+<header><div class="brand"><img class="mark" src="./icon.png" width="56" height="56" alt=""><h1>Local Stream Manager</h1></div><span id="connection" role="status"></span></header>
+<section class="panel">
+<h2>Aggiungi download</h2>
+<label class="destination">Libreria di destinazione
+<select id="category">
+<option value="auto">Automatica</option>
+<option value="movie">Film · Movies</option>
+<option value="series">Serie TV</option>
+<option value="cartoon">Cartoni · Film e serie</option>
+</select>
+</label>
+<form id="download">
+<label>URL della serie, dell’episodio o del video autorizzato<input id="url" type="url" required></label>
+<label>Titolo per la libreria (facoltativo)<input id="title" maxlength="100"></label>
+<button id="queue-submit">Aggiungi alla coda</button>
+<fieldset id="toon-catalog" hidden style="grid-column:1/-1">
+<legend>Episodi Toonitalia</legend>
+<label><input id="toon-all" type="checkbox"> Seleziona tutti</label>
+<div id="toon-episodes"></div>
+</fieldset>
+<details id="jellyfin-options" style="grid-column:1/-1">
+<summary>Destinazione Jellyfin</summary>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px;margin-top:10px">
+<label>Nome esatto della serie<input id="jf-series" maxlength="100" placeholder="La leggendaria storia degli 883"></label>
+<label>Stagione<input id="jf-season" type="number" min="0" max="999" value="1"></label>
+<label>Episodio (facoltativo)<input id="jf-episode" type="number" min="1" max="9999" placeholder="Numero della fonte"></label>
+<label>Titolo episodio (facoltativo)<input id="jf-subtitle" maxlength="95" placeholder="Nord Sud Ovest Est"></label>
+</div>
+<p id="jf-preview" class="file-path"></p>
+</details>
+</form>
+<details id="import-links">
+<summary>Importa link da Brave, SerieLink o ToonLink</summary>
+<form id="import-form">
+<label>File esportato da ToonLink o SerieLink<input id="import-file" type="file" accept=".crawljob,.txt,.json"></label>
+<label>Link o contenuto del file .crawljob
+<textarea id="import-text" spellcheck="false"></textarea></label>
+<button type="submit">Importa nella coda</button>
+</form>
+</details>
+<p id="message" role="status"></p>
+<details id="maintenance">
+<summary>Archivio Toshiba</summary>
+<p id="archive-state"></p>
+</details>
+</section>
+<section id="now" class="panel now" aria-label="Trasferimento in evidenza" hidden>
+  <div class="dial" aria-hidden="true"><strong id="now-percent"></strong></div>
+  <div>
+    <p id="now-state"></p>
+    <h2 id="now-title"></h2>
+    <div id="now-metrics"></div>
+  </div>
+</section>
+<p id="up-next" hidden><strong>Prossimo in coda</strong><span id="next-title"></span></p>
+<div class="workspace">
+<section class="panel">
+<div class="section-head"><h2>Coda download</h2><span id="summary" class="summary"></span></div>
+<div class="filters" aria-label="Filtra la coda">
+<button type="button" data-filter="all" aria-pressed="true">Tutti</button>
+<button type="button" data-filter="active" aria-pressed="false">In corso e in attesa</button>
+<button type="button" data-filter="done" aria-pressed="false">Completati</button>
+<button type="button" data-filter="error" aria-pressed="false">Errori</button>
+</div>
+<p id="action-message" role="status"></p>
+<ul id="jobs"></ul>
+</section>
+<section class="panel"><h2>File salvati</h2><ul id="library"></ul></section>
+</div>
+</main>
+<script>
+const form = document.querySelector('#download');
+const message = document.querySelector('#message');
+const connection = document.querySelector('#connection');
+const activeStates = new Set(['Scansione', 'Download', 'Nuovo tentativo', 'Verifica', 'Sospensione', 'Annullamento']);
+const decimal = new Intl.NumberFormat('it-IT', {maximumFractionDigits: 1});
+
+function element(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+
+function duration(seconds) {
+  const total = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor(total / 60) % 60;
+  return [hours && hours + ' h', minutes && minutes + ' min', total % 60 + ' s'].filter(Boolean).join(' ');
+}
+
+let filter = 'all';
+let latest = [[], []];
+let commandPending = false;
+let newJobs = new Set();
+document.querySelector('.filters').addEventListener('click', event => {
+  const button = event.target.closest('[data-filter]');
+  if (!button) return;
+  filter = button.dataset.filter;
+  document.querySelectorAll('[data-filter]').forEach(item => {
+    item.setAttribute('aria-pressed', String(item === button));
+  });
+  render(...latest);
+});
+
+async function sendCommand(job, action, button) {
+  if (commandPending) return;
+  commandPending = true;
+  button.disabled = true;
+  const feedback = document.querySelector('#action-message');
+  feedback.textContent = '';
+  try {
+    await api('/jobs/' + job.id + '/' + action, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}
+    });
+    latest[0] = await api('/jobs');
+    render(...latest);
+  } catch (error) {
+    feedback.textContent = error.message;
+  } finally {
+    commandPending = false;
+    button.disabled = false;
+  }
+}
+
+function queueRow(job) {
+  const row = element('li', '', 'job');
+  row.dataset.state = job.status;
+  row.dataset.new = String(newJobs.has(job.id));
+  row.style.setProperty('--pulse-offset', -(performance.now() % 1800) / 1000 + 's');
+  const head = element('div', '', 'job-head');
+  const status = element('span', job.queue_position ? 'In coda · ' + job.queue_position : job.status, 'status');
+  status.dataset.kind = job.status;
+  head.append(element('span', job.title, 'job-title'), status);
+  row.append(head);
+  if (job.status === 'Download' || job.status === 'Verifica') {
+    const progress = element('progress');
+    progress.max = 100;
+    progress.setAttribute('aria-label', 'Avanzamento di ' + job.title);
+    const metrics = element('div', '', 'metrics');
+    if (Number.isFinite(job.percent)) {
+      progress.value = job.percent;
+      metrics.append(element('strong', decimal.format(job.percent) + '%'));
+    } else if (job.status === 'Download') {
+      metrics.append(element('span', 'Durata totale non disponibile'));
+    }
+    if (job.status === 'Download' && Number.isFinite(job.bytes_per_second)) {
+      metrics.append(element('span', rateLabel(job.bytes_per_second)));
+    }
+    if (job.status === 'Download' && Number.isFinite(job.eta)) {
+      metrics.append(element('span', 'Restano circa ' + duration(job.eta)));
+    }
+    row.append(progress, metrics);
+  }
+  if (job.transfer && job.status === 'Download') row.append(element('small', job.transfer, 'file-path'));
+  if (job.file && job.status !== 'Già esistente') row.append(element('small', job.file, 'file-path'));
+  if (job.status === 'Già esistente') {
+    if (job.quality) {
+      row.append(element('p', job.quality.source ? 'Fonte: ' + job.quality.source :
+        'Risoluzione della fonte non rilevabile prima del download.', 'file-path'));
+    }
+    const matches = element('ul', '', 'duplicate-paths');
+    for (const file of job.duplicates || []) {
+      const match = element('li', file);
+      const quality = job.quality?.existing?.[file];
+      if (quality) {
+        match.append(element('div', [quality.label || 'Dati video non rilevabili', quality.relation]
+          .filter(Boolean).join(' · '), 'file-path'));
+      }
+      matches.append(match);
+    }
+    row.append(matches);
+  }
+  if (job.status === 'In pausa') row.append(element('small', 'Riprendendo, il download riparte dall’inizio.', 'file-path'));
+  const actions = element('div', '', 'actions');
+  const controls = [];
+  if (['In coda', 'Scansione', 'Nuovo tentativo', 'Download', 'Verifica'].includes(job.status)) {
+    controls.push(['pause', 'Pausa'], ['cancel', 'Annulla']);
+  } else if (job.status === 'In pausa') {
+    controls.push(['resume', 'Riprendi'], ['cancel', 'Annulla']);
+  } else if (job.status === 'Già esistente') {
+    controls.push(['keep-version', 'Scarica altra versione'], ['cancel', 'Salta']);
+  } else if (['Errore', 'Annullato'].includes(job.status)) {
+    controls.push(['resume', 'Riprova']);
+  }
+  for (const [action, label] of controls) {
+    const button = element('button', label);
+    button.type = 'button';
+    button.dataset.command = job.id + ':' + action;
+    button.setAttribute('aria-label', label + ': ' + job.title);
+    button.onclick = () => sendCommand(job, action, button);
+    actions.append(button);
+  }
+  if (controls.length) row.append(actions);
+  if (job.error) row.append(element('p', job.error, 'error'));
+  if (job.warning) row.append(element('p', job.warning, 'file-path'));
+  return row;
+}
+
+const nowPanel = document.querySelector('#now');
+function rateLabel(rate) {
+  const large = rate >= 1e6;
+  return decimal.format(rate / (large ? 1e6 : 1e3)) + (large ? ' MB/s' : ' kB/s') + ' su file';
+}
+
+function renderFeatured(jobs) {
+  const job = jobs.find(item => activeStates.has(item.status)) ||
+    jobs.find(item => item.status === 'In pausa') ||
+    [...jobs].reverse().find(item => ['Completato', 'Errore'].includes(item.status));
+  nowPanel.hidden = !job;
+  if (!job) return;
+  if (nowPanel.dataset.job !== job.id) {
+    nowPanel.dataset.job = job.id;
+    delete nowPanel.dataset.state;
+    void nowPanel.offsetWidth;
+  }
+  nowPanel.dataset.state = job.status;
+  const dial = nowPanel.querySelector('.dial');
+  const percent = job.status === 'Completato' ? 100 : job.percent;
+  const known = Number.isFinite(percent);
+  dial.style.setProperty('--amount', (known ? percent : 0) + '%');
+  dial.dataset.busy = String(!known && activeStates.has(job.status));
+  const label = job.status === 'Completato' ? '✓' : known ? decimal.format(percent) + '%' : '—';
+  const value = document.querySelector('#now-percent');
+  if (value.textContent !== label) value.textContent = label;
+  const running = jobs.filter(item => activeStates.has(item.status)).length;
+  document.querySelector('#now-state').textContent = [job.status,
+    job.status === 'Download' ? job.transfer : null,
+    running > 1 ? running + ' trasferimenti attivi' : null].filter(Boolean).join(' · ');
+  document.querySelector('#now-title').textContent = job.title;
+  const metrics = [];
+  if (job.status === 'Download') {
+    if (Number.isFinite(job.bytes_per_second)) metrics.push(rateLabel(job.bytes_per_second));
+    if (Number.isFinite(job.eta)) metrics.push('Circa ' + duration(job.eta) + ' rimanenti');
+    if (!known) metrics.push('Durata totale non disponibile');
+  }
+  if (job.error) metrics.push(job.error);
+  document.querySelector('#now-metrics').replaceChildren(...metrics.map(text => element('span', text)));
+}
+
+function render(jobs, library) {
+  renderFeatured(jobs);
+  const waiting = jobs.filter(job => job.status === 'In coda')
+    .sort((a, b) => (a.queue_position ?? Infinity) - (b.queue_position ?? Infinity));
+  document.querySelector('#up-next').hidden = waiting.length === 0;
+  document.querySelector('#next-title').textContent = waiting[0]?.title || '';
+  const counts = [
+    [jobs.filter(job => job.status === 'Già esistente').length, 'da confermare'],
+    [jobs.filter(job => activeStates.has(job.status)).length, 'in corso'],
+    [jobs.filter(job => job.status === 'In coda').length, 'in attesa'],
+    [jobs.filter(job => job.status === 'Completato').length, 'completati'],
+    [jobs.filter(job => job.status === 'Errore').length, 'errori']
+  ];
+  document.querySelector('#summary').textContent = counts.filter(([count]) => count)
+    .map(([count, label]) => count + ' ' + label).join(' · ');
+  latest = [jobs, library];
+  const visible = jobs.filter(job => filter === 'all' ||
+    (filter === 'active' && (activeStates.has(job.status) || ['In coda', 'In pausa', 'Già esistente'].includes(job.status))) ||
+    (filter === 'done' && job.status === 'Completato') ||
+    (filter === 'error' && job.status === 'Errore'));
+  visible.sort((a, b) => {
+    const rank = item => item.status === 'Già esistente' ? 0 : activeStates.has(item.status) ? 1 : item.status === 'In coda' ? 2 : 3;
+    return rank(a) - rank(b) ||
+      (a.queue_position ?? Infinity) - (b.queue_position ?? Infinity);
+  });
+  const focused = document.activeElement?.dataset.command;
+  const list = document.querySelector('#jobs');
+  list.replaceChildren(...(visible.length ? visible.map(queueRow) :
+    [element('li', jobs.length ? 'Nessun download in questa vista' : 'Coda vuota', 'empty')]));
+  if (focused) [...list.querySelectorAll('[data-command]')]
+    .find(button => button.dataset.command === focused)?.focus({preventScroll:true});
+  document.querySelector('#library').replaceChildren(...(library.length ?
+    library.map(name => element('li', name, 'file')) : [element('li', 'Nessun video salvato', 'empty')]));
+}
+
+async function api(path, options) {
+  const response = await fetch('.' + path, options);
+  const result = await response.json();
+  if (!response.ok) throw Error(result.error || 'Richiesta non riuscita');
+  return result;
+}
+
+const importForm = document.querySelector('#import-form');
+const importFile = document.querySelector('#import-file');
+const importText = document.querySelector('#import-text');
+importFile.addEventListener('change', async () => {
+  const file = importFile.files[0];
+  if (!file) return;
+  importText.value = '';
+  if (file.size > 480000) {
+    importFile.value = '';
+    message.textContent = 'File troppo grande. Esporta un intervallo di episodi più breve.';
+    return;
+  }
+  try {
+    const contents = await file.text();
+    if (importFile.files[0] === file) importText.value = contents;
+  } catch {
+    message.textContent = 'Impossibile leggere il file scelto.';
+  }
+});
+const category = document.querySelector('#category');
+async function submitJobs(event, payload) {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button');
+  const submittedForm = event.currentTarget;
+  button.disabled = true;
+  message.textContent = 'Aggiunta alla coda…';
+  try {
+    const result = await api('/jobs', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    newJobs = new Set(result.ids);
+    document.querySelector('[data-filter="all"]').click();
+    message.textContent = result.ids.length === 1 ? 'Un download aggiunto' : result.ids.length + ' download aggiunti';
+    submittedForm.reset();
+    try {
+      const jobs = await api('/jobs');
+      render(jobs, latest[1]);
+      const added = jobs.find(job => newJobs.has(job.id));
+      if (added && result.ids.length === 1) message.textContent = 'Aggiunto: ' + added.title;
+    } catch {
+      message.textContent += ' · la coda si aggiornerà alla riconnessione';
+    }
+    if (typeof button.animate === 'function' && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      button.animate([{transform:'scale(.97)'}, {transform:'scale(1.035)'}, {transform:'scale(1)'}], 280);
+    }
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function jellyfinFields() {
+  if (category.value === 'movie') return null;
+  const series = document.querySelector('#jf-series').value.trim();
+  if (!series) return null;
+  const season = document.querySelector('#jf-season').value;
+  const episode = document.querySelector('#jf-episode').value;
+  return {series, season: season === '' ? null : Number(season), episode: episode ? Number(episode) : null,
+    subtitle: document.querySelector('#jf-subtitle').value.trim()};
+}
+function previewJellyfin() {
+  const fields = jellyfinFields();
+  const preview = document.querySelector('#jf-preview');
+  if (!fields || fields.season === null) {
+    preview.textContent = '';
+    return;
+  }
+  const season = String(fields.season).padStart(2, '0');
+  const episode = fields.episode === null ? '…' : String(fields.episode).padStart(2, '0');
+  preview.textContent = (category.value === 'cartoon' ? 'Cartoni/' : 'Serie TV/') + fields.series + '/Season ' + season + '/' +
+    fields.series + ' - S' + season + 'E' + episode + (fields.subtitle ? ' - ' + fields.subtitle : '');
+}
+document.querySelector('#jellyfin-options').addEventListener('input', previewJellyfin);
+category.addEventListener('change', () => {
+  document.querySelector('#jellyfin-options').hidden = category.value === 'movie';
+  previewJellyfin();
+});
+const input = document.querySelector('#url');
+const chooser = document.querySelector('#toon-catalog');
+const episodeList = document.querySelector('#toon-episodes');
+const selectAll = document.querySelector('#toon-all');
+const queueSubmit = document.querySelector('#queue-submit');
+let checkedUrl = '';
+let catalogRequest;
+
+function isToonitalia(url) {
+  try {
+    const parsed = new URL(url);
+    return ['toonitalia.xyz', 'www.toonitalia.xyz'].includes(parsed.hostname) &&
+      /^\/[^/]+\/?$/.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function resetCatalog() {
+  catalogRequest?.abort();
+  checkedUrl = '';
+  chooser.hidden = true;
+  selectAll.checked = false;
+  selectAll.indeterminate = false;
+  episodeList.replaceChildren();
+  queueSubmit.disabled = false;
+  queueSubmit.textContent = isToonitalia(input.value) ? 'Leggi episodi Toonitalia' : 'Aggiungi alla coda';
+}
+
+function episodeChecks() {
+  return [...episodeList.querySelectorAll('input')];
+}
+selectAll.addEventListener('change', () => {
+  for (const checkbox of episodeChecks()) checkbox.checked = selectAll.checked;
+});
+episodeList.addEventListener('change', () => {
+  const boxes = episodeChecks();
+  const count = boxes.filter(box => box.checked).length;
+  selectAll.checked = count === boxes.length;
+  selectAll.indeterminate = count > 0 && count < boxes.length;
+});
+input.addEventListener('input', resetCatalog);
+form.addEventListener('reset', () => setTimeout(() => {
+  previewJellyfin();
+  resetCatalog();
+}, 0));
+
+async function readToonCatalog(url) {
+  const controller = new AbortController();
+  catalogRequest = controller;
+  queueSubmit.disabled = true;
+  message.textContent = 'Lettura del catalogo Toonitalia…';
+  try {
+    const result = await api('/toonitalia/catalogo', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url}), signal: controller.signal
+    });
+    if (controller.signal.aborted) return;
+    if (!result.episodes?.length) throw Error('Nessun episodio disponibile.');
+    for (const episode of result.episodes) {
+      const label = document.createElement('label');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = episode.key;
+      label.append(checkbox, episode.title + (episode.opening ? ' · Sigla' : ''));
+      episodeList.append(label);
+    }
+    checkedUrl = url;
+    chooser.hidden = false;
+    queueSubmit.textContent = 'Accoda la selezione';
+    message.textContent = 'Scegli gli episodi o la sigla da scaricare.';
+  } catch (error) {
+    if (!controller.signal.aborted) message.textContent = error.message;
+  } finally {
+    if (catalogRequest === controller && !controller.signal.aborted) queueSubmit.disabled = false;
+  }
+}
+
+form.onsubmit = event => {
+  const url = input.value.trim();
+  let episodes;
+  if (isToonitalia(url)) {
+    if (checkedUrl !== url) {
+      event.preventDefault();
+      return readToonCatalog(url);
+    }
+    episodes = episodeChecks().filter(box => box.checked).map(box => box.value);
+    if (!episodes.length) {
+      event.preventDefault();
+      message.textContent = 'Seleziona almeno un episodio o la sigla.';
+      return;
+    }
+  }
+  return submitJobs(event, {url, episodes, title: document.querySelector('#title').value,
+    jellyfin: jellyfinFields(), category: category.value});
+};
+importForm.onsubmit = event => {
+  if (!importText.value.trim()) {
+    event.preventDefault();
+    message.textContent = 'Scegli un file .crawljob o incolla i link.';
+    return;
+  }
+  return submitJobs(event, {
+    links: importText.value, title: document.querySelector('#title').value, category: category.value,
+    import_source: /^toonlink/i.test(importFile.files[0]?.name || '') ? 'toonlink' : undefined
+  });
+};
+
+async function poll() {
+  try {
+    const snapshot = await Promise.all([api('/jobs'), api('/library')]);
+    if (!commandPending) render(...snapshot);
+    connection.textContent = '';
+  } catch {
+    connection.textContent = 'Connessione interrotta · dati non aggiornati';
+  } finally {
+    setTimeout(poll, 1500);
+  }
+}
+const sharedParams = new URLSearchParams(location.hash.slice(1));
+const shared = sharedParams.get('url');
+if (shared && /^https?:\/\//i.test(shared)) {
+  input.value = shared;
+  document.querySelector('#title').value = (sharedParams.get('title') || '').slice(0, 100);
+  const destination = sharedParams.get('category');
+  if (['movie', 'series', 'cartoon'].includes(destination)) {
+    category.value = destination;
+    category.dispatchEvent(new Event('change'));
+  }
+  history.replaceState(null, '', location.pathname + location.search);
+}
+resetCatalog();
+async function pollMaintenance() {
+  const state = document.querySelector('#archive-state');
+  try {
+    const {archive} = await api('/maintenance');
+    state.textContent = archive ? 'Archivio Toshiba collegato' : 'Archivio Toshiba in attesa o disattivato';
+  } catch {
+    state.textContent = 'Stato archivio non disponibile';
+  }
+}
+poll();
+pollMaintenance();
+setInterval(pollMaintenance, 30000);
+</script>
+</body>
+</html>
