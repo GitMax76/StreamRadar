@@ -398,6 +398,18 @@ function managerLink(url, title, label = 'Apri in Local Stream Manager') {
   return link;
 }
 
+function loonexSeriesActions(title) {
+  const names = [title.title, title.originalTitle];
+  if (title.type !== 'tv' || !names.some(name => /^loli\s*rock$/i.test(name?.trim() || ''))) return null;
+  const url = 'https://loonex.eu/lolirock/';
+  const section = element('section', 'detail-section community');
+  const actions = element('div', 'reviews');
+  actions.append(managerLink(url, { title: 'LoliRock', animation: true }, 'Scegli episodi'),
+    external('Apri su LooneX', url, 'action'));
+  section.append(element('h3', null, 'LooneX'), actions);
+  return section;
+}
+
 function renderCommunity(source, signal, provider, name, label, title) {
   const section = element('section', 'detail-section community');
   const status = element('p', 'detail-note');
@@ -461,7 +473,10 @@ function renderDetail(title, communitySource, signal) {
   hero.append(picture(title.poster, 'detail-poster', false, { text: title.title, url: title.posterFallback }), info);
   const plot = element('section', 'detail-section');
   plot.append(element('h3', null, 'Trama'), element('p', 'plot', title.overview || 'Trama non disponibile nella fonte.'));
-  content.append(hero, renderCommunity(communitySource, signal, 'community', 'StreamingCommunity', 'Apri su StreamingCommunity', title));
+  content.append(hero);
+  const loonex = loonexSeriesActions(title);
+  if (loonex) content.append(loonex);
+  content.append(renderCommunity(communitySource, signal, 'community', 'StreamingCommunity', 'Apri su StreamingCommunity', title));
   if (title.animation) {
     content.append(renderCommunity(communitySource, signal, 'animeunity', 'AnimeUnity', 'Apri su AnimeUnity', title),
       renderCommunity(communitySource, signal, 'toonitalia', 'Toonitalia', 'Apri su Toonitalia', title));
