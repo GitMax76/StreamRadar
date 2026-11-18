@@ -1,6 +1,8 @@
 """Public episode listings and media explicitly exposed by the player."""
 import json
 import re
+import subprocess
+import sys
 from html import unescape
 from html.parser import HTMLParser
 from urllib.request import Request
@@ -12,7 +14,7 @@ import streamingcommunity_resolver as sc
 def provider(url):
     host = (urlsplit(url).hostname or "").removeprefix("www.")
     return {"animeunity.co": "AnimeUnity", "animesaturn.ro": "AnimeSaturn",
-            "toonitalia.xyz": "Toonitalia", "cb01one.uno": "CB01"}.get(host)
+            "toonitalia.xyz": "Toonitalia", "cb01one.uno": "CB01", "loonex.eu": "LooneX"}.get(host)
 
 
 def toon_player(url):
@@ -72,6 +74,65 @@ class Page(HTMLParser):
 def entry(url, name, season, number):
     return {"url": url, "title": f"{name} - S{season:02d}E{number:02d}",
             "season": season, "number": number}
+
+
+def loonex_episode(url):
+    parsed = urlsplit(url)
+    if (provider(url) != "LooneX" or parsed.scheme != "https" or parsed.port not in (None, 443)
+            or parsed.username is not None or parsed.password is not None):
+        return None
+    match = re.fullmatch(r"/lolirock/stream/ok/([1-9][0-9]?)x([0-9]{2})\.php", parsed.path)
+    if match and int(match[2]) > 0:
+        return "LoliRock", int(match[1]), int(match[2])
+    return None
+
+
+def resolve_loonex(url, timeout):
+    name, season, number = loonex_episode(url)
+    episode_url = f"https://loonex.eu/lolirock/stream/ok/{season}x{number:02d}.php"
+    session = sc._new_session()
+    with session.open(Request(episode_url, headers={"User-Agent": sc.USER_AGENT}), timeout=timeout) as response:
+        if loonex_episode(response.geturl()) != (name, season, number):
+            raise sc.PageFormatError("LooneX ha reindirizzato a una pagina diversa.")
+        data = response.read(1024 * 1024 + 1)
+    if len(data) > 1024 * 1024:
+        raise sc.PageFormatError("Pagina episodio LooneX troppo grande.")
+    html = unescape(data.decode("utf-8", errors="replace")).replace(r"\/", "/")
+    match = re.search(r"""https://(?:www\.)?ok\.ru/videoembed/([0-9]{1,20})(?=[\s"'?<>\\]|$)""", html)
+    if not match:
+        raise sc.PageFormatError("Player OK.ru assente nella pagina LooneX.")
+    embed = f"https://ok.ru/videoembed/{match[1]}"
+    try:
+        result = subprocess.run(
+            [sys.executable, "-I", "-m", "yt_dlp", "--ignore-config", "--no-plugin-dirs",
+             "--no-cache-dir", "--use-extractors", "^Odnoklassniki$", "--simulate",
+             "--no-playlist", "--socket-timeout", "10", "--retries", "0",
+             "--referer", episode_url, "-f", "best[protocol^=m3u8][height<=1080]",
+             "--dump-single-json", "--", embed],
+            capture_output=True, encoding="utf-8", errors="replace", timeout=40, check=True
+        )
+        info = json.loads(result.stdout)
+    except subprocess.TimeoutExpired as exc:
+        raise sc.PageFormatError("OK.ru non ha risposto entro il tempo previsto.") from exc
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        detail = getattr(exc, "stderr", "") or ""
+        status = re.search(r"HTTP Error ([45]\d{2})", detail)
+        reason = f"HTTP {status[1]}" if status else "formato HLS non disponibile o estrattore non funzionante"
+        raise sc.PageFormatError(f"OK.ru: {reason}.") from exc
+
+    media = info.get("url")
+    if not isinstance(media, str) or not str(info.get("protocol", "")).startswith("m3u8") or info.get("has_drm"):
+        raise sc.PageFormatError("OK.ru non ha restituito una playlist HLS compatibile.")
+    upstream = urlsplit(media)
+    host = upstream.hostname or ""
+    if (upstream.scheme != "https" or upstream.port not in (None, 443)
+            or upstream.username is not None or upstream.password is not None
+            or not any(host == domain or host.endswith("." + domain)
+                       for domain in ("ok.ru", "okcdn.ru", "mycdn.me"))):
+        raise sc.PageFormatError("OK.ru ha restituito un indirizzo video inatteso.")
+    return {"success": True, "media_url": media, "hls": True,
+            "title": entry(episode_url, name, season, number)["title"],
+            "headers": {"Referer": embed, "User-Agent": sc.USER_AGENT}}
 
 
 def is_listing(url):
@@ -214,6 +275,13 @@ class PlayerVerificationRequired(sc.PageFormatError):
 
 
 def resolve(url, timeout=15):
+    if provider(url) == "LooneX":
+        if not loonex_episode(url):
+            return {"success": False, "error": "Incolla la pagina di un singolo episodio LoliRock."}
+        try:
+            return resolve_loonex(url, timeout)
+        except (OSError, ValueError) as exc:
+            return {"success": False, "error": sc._error("LooneX", exc)}
     session = sc._new_session()
     visited = set()
     cb01 = provider(url) == "CB01"

@@ -257,6 +257,11 @@ def download(job, url, ticket=None):
                 media, headers = result["media_url"], result["headers"]
                 resolved_title = result.get("title", "")
                 resolved_year = result.get("year", "")
+                if result.get("hls"):
+                    playlist = imported_playlist(media, headers)
+                    if not playlist["success"]:
+                        update_active(job, status="Errore", error=playlist["error"])
+                        return
             elif urlsplit(url).path.lower().endswith(".m3u8") or is_vix_playlist(url):
                 result = imported_playlist(url)
                 if not result["success"]:
@@ -628,6 +633,16 @@ class Handler(BaseHTTPRequestHandler):
                                "cartoon" if site == "Toonitalia" and category in {"", "auto"} else category,
                                ep.get("alternatives", ()))
                        for ep in episodes]
+            elif site == "LooneX":
+                episode = public_sources.loonex_episode(url)
+                if episode is None:
+                    raise ValueError("Apri un episodio di LoliRock su LooneX e incolla il link dell'episodio.")
+                if category == "movie":
+                    raise ValueError("Per LoliRock scegli Cartoni o Serie TV.")
+                name, season, number = episode
+                label = public_sources.entry(url, name, season, number)["title"]
+                ids = [enqueue(url, label, custom_title, episode, public_player=True,
+                               jellyfin=jellyfin, category="cartoon" if category in {"", "auto"} else category)]
             elif resolver.is_streamingcommunity_url(url) or site in {"AnimeUnity", "AnimeSaturn", "CB01"} or parsed.path.lower().endswith(".mp4"):
                 label = custom_title or queued_title(parsed)
                 if not custom_title and resolver.is_streamingcommunity_url(url):
