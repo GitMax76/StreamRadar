@@ -1,4 +1,5 @@
 .env
+.docker-cli/
 .env.*
 !.env.example
 downloads/

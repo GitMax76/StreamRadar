@@ -37,6 +37,8 @@ if ! grep -Fx "APP_BIND_IP=$ip" "$config" >/dev/null; then
 fi
 
 export APP_BIND_IP="$ip" APP_PORT=8790 LSM_DATA_PATH=./downloads
+export DOCKER_CONFIG="${DOCKER_CONFIG:-"$PWD/.docker-cli"}"
+mkdir -p -- "$DOCKER_CONFIG"
 compose=(docker compose --env-file "$config" -p streamsuite-prova -f compose.yaml)
 "${compose[@]}" config --quiet
 "${compose[@]}" up -d --build
@@ -53,5 +55,6 @@ for ((attempt=0; attempt<25; attempt++)); do
     fi
     sleep 2
 done
-printf 'Verifica HTTP fallita per %s. Log con docker compose --env-file %s -p streamsuite-prova logs --tail=50.\n' "$url" "$config" >&2
+"${compose[@]}" logs --tail=20 >&2
+printf 'Verifica HTTP fallita per %s.\n' "$url" >&2
 exit 1

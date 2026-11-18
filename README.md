@@ -14,7 +14,7 @@ Quando StreamRadar trova una scheda della fonte, **Apri in Local Stream Manager*
 
 Per una prova accanto alle app già installate, copia il progetto in una cartella dedicata, per esempio `/DATA/AppData/StreamSuite-Prova`. Da quella cartella esegui `sudo bash scripts/zima-prova.sh IP-LAN-DEL-NAS`. Lo script crea il progetto Docker `streamsuite-prova` sulla porta `8790`, usa una cartella download locale e salva una password dedicata in `.env.prova`. Recupera solo le chiavi API dall'installazione esistente di StreamRadar. Se serve indicare un percorso diverso per il suo file `.env`, passalo come secondo argomento.
 
-Per fermare la prova, dalla stessa cartella esegui `sudo docker compose --env-file .env.prova -p streamsuite-prova down`.
+Per fermare la prova da una shell con accesso alla cartella del progetto, esegui `sudo env DOCKER_CONFIG="$PWD/.docker-cli" docker compose --env-file .env.prova -p streamsuite-prova down`.
 
 Servono Docker Compose V2 e una cartella scrivibile per la libreria. Dalla radice del progetto esegui:
 
