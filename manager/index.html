@@ -147,6 +147,7 @@
 <fieldset id="toon-catalog" hidden style="grid-column:1/-1">
 <legend id="episode-source">Episodi</legend>
 <label><input id="toon-all" type="checkbox"> Seleziona tutti</label>
+<p id="episode-selection" aria-live="polite"></p>
 <div id="toon-episodes"></div>
 </fieldset>
 <details id="jellyfin-options" style="grid-column:1/-1">
@@ -196,7 +197,7 @@
 <p id="action-message" role="status"></p>
 <ul id="jobs"></ul>
 </section>
-<section class="panel"><h2>File salvati</h2><ul id="library"></ul></section>
+<section class="panel"><h2>File salvati</h2><p id="downloads-path" class="file-path"></p><ul id="library"></ul></section>
 </div>
 </main>
 <script>
@@ -285,6 +286,18 @@ function queueRow(job) {
   }
   if (job.transfer && job.status === 'Download') row.append(element('small', job.transfer, 'file-path'));
   if (job.file && job.status !== 'Già esistente') row.append(element('small', job.file, 'file-path'));
+  if (job.status === 'Completato' && Number.isFinite(job.saved_bytes)) {
+    const details = [decimal.format(job.saved_bytes / 1048576) + ' MiB'];
+    if (Number.isFinite(job.duration)) details.push(duration(job.duration));
+    row.append(element('small', details.join(' · '), 'file-path'));
+  }
+  if (job.source_url) {
+    const source = element('a', 'Apri episodio sorgente', 'file-path');
+    source.href = job.source_url;
+    source.target = '_blank';
+    source.rel = 'noopener noreferrer';
+    row.append(source);
+  }
   if (job.status === 'Già esistente') {
     if (job.quality) {
       row.append(element('p', job.quality.source ? 'Fonte: ' + job.quality.source :
@@ -517,6 +530,7 @@ function resetCatalog() {
   selectAll.checked = false;
   selectAll.indeterminate = false;
   episodeList.replaceChildren();
+  document.querySelector('#episode-selection').textContent = '';
   queueSubmit.disabled = false;
   const source = catalogSource(input.value);
   queueSubmit.textContent = source ? 'Leggi episodi ' + source : 'Aggiungi alla coda';
@@ -527,13 +541,17 @@ function episodeChecks() {
 }
 selectAll.addEventListener('change', () => {
   for (const checkbox of episodeChecks()) checkbox.checked = selectAll.checked;
+  updateEpisodeSelection();
 });
-episodeList.addEventListener('change', () => {
+episodeList.addEventListener('change', updateEpisodeSelection);
+function updateEpisodeSelection() {
   const boxes = episodeChecks();
   const count = boxes.filter(box => box.checked).length;
-  selectAll.checked = count === boxes.length;
+  selectAll.checked = count > 0 && count === boxes.length;
   selectAll.indeterminate = count > 0 && count < boxes.length;
-});
+  document.querySelector('#episode-selection').textContent = count + ' di ' + boxes.length + ' selezionati';
+  if (checkedUrl) queueSubmit.disabled = count === 0;
+}
 input.addEventListener('input', resetCatalog);
 form.addEventListener('reset', () => setTimeout(() => {
   previewJellyfin();
@@ -558,7 +576,8 @@ async function readEpisodeCatalog(url, source) {
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.value = episode.key;
-      label.append(checkbox, episode.title + (episode.opening ? ' · Sigla' : ''));
+      const title = [episode.title, episode.episode_title || (episode.opening ? 'Sigla' : '')].filter(Boolean).join(' · ');
+      label.append(checkbox, title);
       episodeList.append(label);
     }
     checkedUrl = url;
@@ -568,7 +587,10 @@ async function readEpisodeCatalog(url, source) {
   } catch (error) {
     if (!controller.signal.aborted) message.textContent = error.message;
   } finally {
-    if (catalogRequest === controller && !controller.signal.aborted) queueSubmit.disabled = false;
+    if (catalogRequest === controller && !controller.signal.aborted) {
+      if (checkedUrl) updateEpisodeSelection();
+      else queueSubmit.disabled = false;
+    }
   }
 }
 
@@ -631,8 +653,9 @@ if (shared && catalogSource(input.value) === 'LooneX') readEpisodeCatalog(input.
 async function pollMaintenance() {
   const state = document.querySelector('#archive-state');
   try {
-    const {archive} = await api('/maintenance');
+    const {archive, downloads_path: path} = await api('/maintenance');
     state.textContent = archive ? 'Archivio Toshiba collegato' : 'Archivio Toshiba in attesa o disattivato';
+    document.querySelector('#downloads-path').textContent = path ? 'Cartella download: ' + path : '';
   } catch {
     state.textContent = 'Stato archivio non disponibile';
   }

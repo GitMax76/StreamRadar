@@ -36,7 +36,7 @@ if ! grep -Fx "APP_BIND_IP=$ip" "$config" >/dev/null; then
     exit 1
 fi
 
-export APP_BIND_IP="$ip" APP_PORT=8790 LSM_DATA_PATH=./downloads
+export APP_BIND_IP="$ip" APP_PORT=8790 LSM_DATA_PATH="$PWD/downloads"
 export DOCKER_CONFIG="${DOCKER_CONFIG:-"$PWD/.docker-cli"}"
 mkdir -p -- "$DOCKER_CONFIG"
 compose=(docker compose --env-file "$config" -p streamsuite-prova -f compose.yaml)

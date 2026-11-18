@@ -59,6 +59,8 @@ def update(job, **values):
 
 def enqueue(url, title, custom_title=None, episode=None, public_player=False, jellyfin=None, category="", toon_links=()):
     job = {"id": uuid.uuid4().hex[:12], "title": title, "status": "In coda", "error": "", "seconds": 0}
+    if public_player and public_sources.loonex_episode(url):
+        job["source_url"] = "https://loonex.eu" + urlsplit(url).path
     with LOCK:
         JOBS[job["id"]] = job
         SOURCES[job["id"]] = (url, custom_title, episode, public_player, jellyfin, category, toon_links)
@@ -305,6 +307,7 @@ def download(job, url, ticket=None):
             )
             if code == 0 and update_active(job, status="Verifica", eta=None, bytes_per_second=None):
                 if verify(partial, job.get("duration")):
+                    saved_bytes = partial.stat().st_size
                     with LOCK:
                         if job["status"] in STOPPING:
                             return
@@ -321,7 +324,7 @@ def download(job, url, ticket=None):
                                 partial.rename(target)
                         except FileExistsError:
                             raise DuplicateConflict(target.relative_to(DATA), [relative], reset_approval=True)
-                        job.update(status="Completato", file=relative, percent=100)
+                        job.update(status="Completato", file=relative, percent=100, saved_bytes=saved_bytes)
                         if excluded_audio is not None:
                             job["warning"] = "Una traccia audio secondaria danneggiata è stata esclusa."
                     return
@@ -524,7 +527,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/":
             self.send(Path(__file__).with_name("index.html").read_bytes(), "text/html; charset=utf-8")
         elif self.path == "/maintenance":
-            self.json({"archive": (ARCHIVE / ".lsm-toshiba").is_file()})
+            self.json({"archive": (ARCHIVE / ".lsm-toshiba").is_file(),
+                       "downloads_path": os.environ.get("LSM_HOST_PATH") or str(DATA)})
         elif self.path == "/jobs":
             with LOCK:
                 positions = {job_id: pos for pos, job_id in enumerate(PENDING_TICKETS, 1)}
@@ -574,6 +578,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError(resolver._error(expected, exc)) from exc
                 self.json({"episodes": [
                     {"key": f'{ep["season"]}:{ep["number"]}', "title": ep["title"],
+                     "episode_title": ep.get("episode_title"),
                      "opening": ep["number"] == 0} for ep in items
                 ]})
                 return
@@ -629,8 +634,8 @@ class Handler(BaseHTTPRequestHandler):
                     episodes = [ep for ep in episodes if f'{ep["season"]}:{ep["number"]}' in keys]
                     if len(episodes) != len(keys):
                         raise ValueError("L'elenco della fonte è cambiato. Ricarica gli episodi.")
-                if site == "LooneX" and jellyfin and len({ep["season"] for ep in episodes}) > 1:
-                    raise ValueError("Per accodare più stagioni LooneX, lascia vuota Destinazione Jellyfin.")
+                if site == "LooneX":
+                    validate_loonex_numbers(jellyfin, [(ep["season"], ep["number"]) for ep in episodes])
                 if jellyfin and len(episodes) > 1 and any(jellyfin[2:]):
                     raise ValueError("Per più episodi, imposta solo il nome serie e la stagione Jellyfin")
                 if jellyfin and any("season" not in ep for ep in episodes) and jellyfin[2] is None:
@@ -646,6 +651,7 @@ class Handler(BaseHTTPRequestHandler):
                 if episode is None:
                     raise ValueError("Incolla il link della serie LoliRock o di un suo episodio LooneX.")
                 name, season, number = episode
+                validate_loonex_numbers(jellyfin, [(season, number)])
                 label = public_sources.entry(url, name, season, number)["title"]
                 ids = [enqueue(url, label, custom_title, episode, public_player=True,
                                jellyfin=jellyfin, category="cartoon" if category in {"", "auto"} else category)]
@@ -663,6 +669,12 @@ class Handler(BaseHTTPRequestHandler):
             self.json({"error": str(exc)}, 400)
             return
         self.json({"ids": ids}, 202)
+
+
+def validate_loonex_numbers(jellyfin, episodes):
+    if jellyfin and any(jellyfin[1] != season or jellyfin[2] not in (None, number)
+                       for season, number in episodes):
+        raise ValueError("Per LooneX usa i numeri della fonte oppure lascia vuota Destinazione Jellyfin.")
 
 
 def jellyfin_options(value):

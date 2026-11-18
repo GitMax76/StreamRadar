@@ -26,6 +26,7 @@ services:
     restart: unless-stopped
     environment:
       LSM_PASSWORD: "${LSM_PASSWORD:?Imposta LSM_PASSWORD nel file .env}"
+      LSM_HOST_PATH: "${LSM_DATA_PATH:-./downloads}"
     volumes:
       - type: bind
         source: "${LSM_DATA_PATH:-./downloads}"

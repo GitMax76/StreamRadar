@@ -96,14 +96,40 @@ def loonex_listing(url):
 
 def loonex_episodes(html):
     found = {}
-    for link in Page(html).links:
-        url = urljoin("https://loonex.eu/lolirock/", link)
-        episode = loonex_episode(url)
-        if episode:
+    for row in re.findall(r"<li\b[^>]*>(.*?)</li\s*>", html, re.I | re.S):
+        label = re.split(r"<a\b", row, maxsplit=1, flags=re.I)[0]
+        label = unescape(re.sub(r"<[^>]+>", " ", label)).strip()
+        heading = re.match(r"^(\d{1,2})x(\d{2})\s*:\s*(.+)", label, re.I)
+        for link in Page(row).links:
+            try:
+                episode = loonex_episode(urljoin("https://loonex.eu/lolirock/", link))
+            except ValueError:
+                continue
+            if not episode:
+                continue
             name, season, number = episode
+            if heading and (int(heading[1]), int(heading[2])) != (season, number):
+                raise sc.PageFormatError(
+                    f"Catalogo LooneX incoerente: {heading[1]}x{heading[2]} punta a {season}x{number:02d}."
+                )
             episode_url = f"https://loonex.eu/lolirock/stream/ok/{season}x{number:02d}.php"
-            found[(season, number)] = entry(episode_url, name, season, number)
+            item = entry(episode_url, name, season, number)
+            if heading:
+                item["episode_title"] = heading[3].strip()[:120]
+            found[(season, number)] = item
     return [found[key] for key in sorted(found)]
+
+
+def verify_loonex_identity(info, video_id, season, number):
+    title = str(info.get("title") or "")
+    expected = f"S{season:02d}E{number:02d}"
+    labels = re.findall(r"(?<![a-z0-9])(?:S(\d{1,2})[ ._-]*E(\d{1,3})|(\d{1,2})x(\d{1,3}))(?![a-z0-9])", title, re.I)
+    actual = {(int(s or alt_s), int(n or alt_n)) for s, n, alt_s, alt_n in labels}
+    if str(info.get("id") or "") != video_id or not re.search(r"(?<![a-z0-9])loli[ ._-]*rock(?![a-z0-9])", title, re.I):
+        raise sc.PageFormatError(f"OK.ru: identità del video non confermata per LoliRock {expected}.")
+    if actual != {(season, number)}:
+        codes = ", ".join(f"S{s:02d}E{n:02d}" for s, n in sorted(actual)) or "numero assente"
+        raise sc.PageFormatError(f"OK.ru: richiesto {expected}, la fonte indica {codes}.")
 
 
 def resolve_loonex(url, timeout):
@@ -139,6 +165,7 @@ def resolve_loonex(url, timeout):
         reason = f"HTTP {status[1]}" if status else "formato HLS non disponibile o estrattore non funzionante"
         raise sc.PageFormatError(f"OK.ru: {reason}.") from exc
 
+    verify_loonex_identity(info, match[1], season, number)
     media = info.get("url")
     if not isinstance(media, str) or not str(info.get("protocol", "")).startswith("m3u8") or info.get("has_drm"):
         raise sc.PageFormatError("OK.ru non ha restituito una playlist HLS compatibile.")
