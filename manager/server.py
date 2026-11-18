@@ -551,7 +551,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.json({"ok": True})
             return
-        if self.path not in {"/jobs", "/toonitalia/catalogo"}:
+        if self.path not in {"/jobs", "/toonitalia/catalogo", "/loonex/catalogo"}:
             self.json({"error": "Pagina inesistente"}, 404)
             return
         if self.headers.get_content_type() != "application/json":
@@ -562,12 +562,16 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < size <= 524288:
                 raise ValueError("Richiesta vuota o troppo grande")
             payload = json.loads(self.rfile.read(size))
-            if self.path == "/toonitalia/catalogo":
+            if self.path in {"/toonitalia/catalogo", "/loonex/catalogo"}:
                 url = payload["url"].strip()
                 input_url(url)
-                if public_sources.provider(url) != "Toonitalia" or not public_sources.is_listing(url):
-                    raise ValueError("Incolla l'indirizzo di una serie Toonitalia.")
-                items = public_sources.episodes(url)
+                expected = "Toonitalia" if self.path == "/toonitalia/catalogo" else "LooneX"
+                if public_sources.provider(url) != expected or not public_sources.is_listing(url):
+                    raise ValueError(f"Incolla l'indirizzo di una serie compatibile con {expected}.")
+                try:
+                    items = public_sources.episodes(url)
+                except OSError as exc:
+                    raise ValueError(resolver._error(expected, exc)) from exc
                 self.json({"episodes": [
                     {"key": f'{ep["season"]}:{ep["number"]}', "title": ep["title"],
                      "opening": ep["number"] == 0} for ep in items
@@ -599,6 +603,8 @@ class Handler(BaseHTTPRequestHandler):
             site = public_sources.provider(url)
             if site == "CB01" and not re.fullmatch(r"/[^/]+/?", parsed.path):
                 raise ValueError("Incolla il link alla scheda di un film CB01")
+            if site == "LooneX" and category == "movie":
+                raise ValueError("Per LoliRock scegli Cartoni o Serie TV.")
             if resolver.is_series_url(url) or public_sources.is_listing(url):
                 messages = []
                 if site:
@@ -613,16 +619,18 @@ class Handler(BaseHTTPRequestHandler):
                         raise ValueError(resolver._error("Pagina titolo", exc)) from exc
                 if not episodes:
                     raise ValueError(messages[-1] if messages else "Nessun episodio disponibile")
-                if "episodes" in payload:
-                    selected = payload["episodes"]
-                    if site != "Toonitalia" or not isinstance(selected, list) or not selected or any(
+                selected = payload.get("episodes")
+                if "episodes" in payload or site == "LooneX":
+                    if site not in {"Toonitalia", "LooneX"} or not isinstance(selected, list) or not selected or any(
                             not isinstance(key, str) or not re.fullmatch(r"\d{1,2}:\d{1,4}", key)
                             for key in selected):
-                        raise ValueError("Seleziona gli episodi Toonitalia da accodare.")
+                        raise ValueError("Seleziona gli episodi da accodare.")
                     keys = set(selected)
                     episodes = [ep for ep in episodes if f'{ep["season"]}:{ep["number"]}' in keys]
                     if len(episodes) != len(keys):
-                        raise ValueError("L'elenco Toonitalia è cambiato. Ricarica gli episodi.")
+                        raise ValueError("L'elenco della fonte è cambiato. Ricarica gli episodi.")
+                if site == "LooneX" and jellyfin and len({ep["season"] for ep in episodes}) > 1:
+                    raise ValueError("Per accodare più stagioni LooneX, lascia vuota Destinazione Jellyfin.")
                 if jellyfin and len(episodes) > 1 and any(jellyfin[2:]):
                     raise ValueError("Per più episodi, imposta solo il nome serie e la stagione Jellyfin")
                 if jellyfin and any("season" not in ep for ep in episodes) and jellyfin[2] is None:
@@ -630,15 +638,13 @@ class Handler(BaseHTTPRequestHandler):
                 ids = [enqueue(ep["url"], ep["title"], custom_title,
                                (ep["title"].rsplit(" - S", 1)[0], ep["season"], ep["number"])
                                if "season" in ep else None, bool(site), jellyfin,
-                               "cartoon" if site == "Toonitalia" and category in {"", "auto"} else category,
+                               "cartoon" if site in {"Toonitalia", "LooneX"} and category in {"", "auto"} else category,
                                ep.get("alternatives", ()))
                        for ep in episodes]
             elif site == "LooneX":
                 episode = public_sources.loonex_episode(url)
                 if episode is None:
-                    raise ValueError("Apri un episodio di LoliRock su LooneX e incolla il link dell'episodio.")
-                if category == "movie":
-                    raise ValueError("Per LoliRock scegli Cartoni o Serie TV.")
+                    raise ValueError("Incolla il link della serie LoliRock o di un suo episodio LooneX.")
                 name, season, number = episode
                 label = public_sources.entry(url, name, season, number)["title"]
                 ids = [enqueue(url, label, custom_title, episode, public_player=True,

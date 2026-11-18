@@ -74,6 +74,30 @@ async function request(path, signal) {
   return data;
 }
 
+async function loadLoonex(query, signal) {
+  const section = byId('loonex-results');
+  const list = byId('loonex-items');
+  const message = byId('loonex-status');
+  try {
+    const { items } = await request('/api/loonex?' + new URLSearchParams({ q: query }), signal);
+    if (signal.aborted) return;
+    message.textContent = '';
+    list.replaceChildren();
+    for (const item of items) {
+      const row = element('li');
+      row.append(element('span', null, item.title), external('Apri su LooneX', item.url, 'action'));
+      if (item.downloadable) row.append(managerLink(item.url, { title: item.title, animation: true }, 'Scegli episodi'));
+      list.append(row);
+    }
+    section.hidden = !items.length;
+  } catch {
+    if (signal.aborted) return;
+    list.replaceChildren();
+    message.textContent = 'Ricerca LooneX non disponibile al momento.';
+    section.hidden = false;
+  }
+}
+
 function card({ item, offers, charts }) {
   const row = element('li');
   const button = element('button', 'card');
@@ -194,6 +218,8 @@ async function loadCatalog(continuation = null) {
   if (!continuation) {
     catalog.replaceChildren();
     seen.clear();
+    byId('loonex-results').hidden = true;
+    byId('loonex-items').replaceChildren();
   }
   const platformName = platform.value ? platform.selectedOptions[0].textContent : '';
   const sectionTitle = { new: 'Novità in Italia', catalog: 'Aggiunti al catalogo', top: 'Tendenze', explore: 'Esplora cataloghi' }[mode];
@@ -223,6 +249,7 @@ async function loadCatalog(continuation = null) {
     status.textContent = 'Digita almeno due caratteri.';
     return;
   }
+  if (searching && ['all', 'animation', 'tv'].includes(category)) loadLoonex(query, controller.signal);
   status.textContent = 'Caricamento…';
   const params = new URLSearchParams({ category, genre: genre.value });
   let feeds;
@@ -363,10 +390,10 @@ function renderReviews(title) {
   return section;
 }
 
-function managerLink(url, title) {
+function managerLink(url, title, label = 'Apri in Local Stream Manager') {
   const category = title.animation ? 'cartoon' : title.type === 'movie' ? 'movie' : 'series';
   const params = new URLSearchParams({ url, title: title.title, category });
-  const link = element('a', 'action', 'Apri in Local Stream Manager');
+  const link = element('a', 'action', label);
   link.href = '/manager/#' + params;
   return link;
 }

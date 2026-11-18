@@ -145,7 +145,7 @@
 <label>Titolo per la libreria (facoltativo)<input id="title" maxlength="100"></label>
 <button id="queue-submit">Aggiungi alla coda</button>
 <fieldset id="toon-catalog" hidden style="grid-column:1/-1">
-<legend>Episodi Toonitalia</legend>
+<legend id="episode-source">Episodi</legend>
 <label><input id="toon-all" type="checkbox"> Seleziona tutti</label>
 <div id="toon-episodes"></div>
 </fieldset>
@@ -498,14 +498,16 @@ const queueSubmit = document.querySelector('#queue-submit');
 let checkedUrl = '';
 let catalogRequest;
 
-function isToonitalia(url) {
+function catalogSource(url) {
   try {
     const parsed = new URL(url);
-    return ['toonitalia.xyz', 'www.toonitalia.xyz'].includes(parsed.hostname) &&
-      /^\/[^/]+\/?$/.test(parsed.pathname);
+    const host = parsed.hostname.replace(/^www\./, '');
+    if (host === 'toonitalia.xyz' && /^\/[^/]+\/?$/.test(parsed.pathname)) return 'Toonitalia';
+    if (host === 'loonex.eu' && parsed.protocol === 'https:' && /^\/lolirock\/?$/.test(parsed.pathname)) return 'LooneX';
   } catch {
-    return false;
+    return null;
   }
+  return null;
 }
 
 function resetCatalog() {
@@ -516,7 +518,8 @@ function resetCatalog() {
   selectAll.indeterminate = false;
   episodeList.replaceChildren();
   queueSubmit.disabled = false;
-  queueSubmit.textContent = isToonitalia(input.value) ? 'Leggi episodi Toonitalia' : 'Aggiungi alla coda';
+  const source = catalogSource(input.value);
+  queueSubmit.textContent = source ? 'Leggi episodi ' + source : 'Aggiungi alla coda';
 }
 
 function episodeChecks() {
@@ -537,18 +540,19 @@ form.addEventListener('reset', () => setTimeout(() => {
   resetCatalog();
 }, 0));
 
-async function readToonCatalog(url) {
+async function readEpisodeCatalog(url, source) {
   const controller = new AbortController();
   catalogRequest = controller;
   queueSubmit.disabled = true;
-  message.textContent = 'Lettura del catalogo Toonitalia…';
+  message.textContent = 'Lettura del catalogo ' + source + '…';
   try {
-    const result = await api('/toonitalia/catalogo', {
+    const result = await api('/' + source.toLowerCase() + '/catalogo', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({url}), signal: controller.signal
     });
     if (controller.signal.aborted) return;
     if (!result.episodes?.length) throw Error('Nessun episodio disponibile.');
+    document.querySelector('#episode-source').textContent = 'Episodi ' + source + ' (' + result.episodes.length + ')';
     for (const episode of result.episodes) {
       const label = document.createElement('label');
       const checkbox = document.createElement('input');
@@ -560,7 +564,7 @@ async function readToonCatalog(url) {
     checkedUrl = url;
     chooser.hidden = false;
     queueSubmit.textContent = 'Accoda la selezione';
-    message.textContent = 'Scegli gli episodi o la sigla da scaricare.';
+    message.textContent = 'Scegli gli episodi o usa Seleziona tutti per accodare la serie.';
   } catch (error) {
     if (!controller.signal.aborted) message.textContent = error.message;
   } finally {
@@ -570,11 +574,12 @@ async function readToonCatalog(url) {
 
 form.onsubmit = event => {
   const url = input.value.trim();
+  const source = catalogSource(url);
   let episodes;
-  if (isToonitalia(url)) {
+  if (source) {
     if (checkedUrl !== url) {
       event.preventDefault();
-      return readToonCatalog(url);
+      return readEpisodeCatalog(url, source);
     }
     episodes = episodeChecks().filter(box => box.checked).map(box => box.value);
     if (!episodes.length) {
@@ -622,6 +627,7 @@ if (shared && /^https?:\/\//i.test(shared)) {
   history.replaceState(null, '', location.pathname + location.search);
 }
 resetCatalog();
+if (shared && catalogSource(input.value) === 'LooneX') readEpisodeCatalog(input.value.trim(), 'LooneX');
 async function pollMaintenance() {
   const state = document.querySelector('#archive-state');
   try {

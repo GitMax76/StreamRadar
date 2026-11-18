@@ -99,6 +99,49 @@ async function fetchPage(url, signal, accept, options = {}) {
   throw new Error('Troppi redirect');
 }
 
+export function loonexResults(body, base) {
+  const archive = /\bid\s*=\s*["']cartoonsContainer["']/i.exec(body);
+  if (!archive) throw new Error('Archivio LooneX assente');
+  const results = new Map();
+  for (const anchor of body.slice(archive.index).matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi)) {
+    const href = /\bhref\s*=\s*(["'])(.*?)\1/i.exec(anchor[1])?.[2];
+    const titleBlock = /<div\b[^>]*\bclass\s*=\s*(["'])[^"']*\bcard-title-cine-v2\b[^"']*\1[^>]*>([\s\S]*?)<\/div\s*>/i.exec(anchor[2]);
+    if (!href || !titleBlock) continue;
+    const title = decodeAttribute(titleBlock[2].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
+    let url;
+    try {
+      url = new URL(decodeAttribute(href), base);
+    } catch {
+      continue;
+    }
+    if (!title || title.length > 180 || !['https://loonex.eu', 'https://www.loonex.eu'].includes(url.origin)
+        || url.username || url.password) continue;
+    const downloadable = /^\/lolirock\/?$/.test(url.pathname);
+    const slug = url.searchParams.get('scheda');
+    if (downloadable) {
+      url = new URL('/lolirock/', 'https://loonex.eu');
+    } else if (/^\/cartoni\/(?:index(?:\.php)?)?$/.test(url.pathname) && /^[a-z0-9_-]{1,180}$/i.test(slug || '')) {
+      url.search = new URLSearchParams({ scheda: slug });
+    } else if (/^\/[a-z0-9_-]+\/?$/.test(url.pathname) && !/^\/cartoni\/?$/.test(url.pathname)) {
+      url.search = '';
+    } else {
+      continue;
+    }
+    url.hash = '';
+    results.set(url.href, { title: downloadable ? 'LoliRock' : title, url: url.href, downloadable });
+    if (results.size >= 24) break;
+  }
+  return [...results.values()];
+}
+
+export async function searchLoonex(query) {
+  const url = new URL('https://loonex.eu/cartoni/index.php');
+  url.searchParams.set('search', query);
+  const page = await fetchPage(url, AbortSignal.timeout(7_000), 'text/html');
+  if (!page) throw new Error('Ricerca LooneX non disponibile');
+  return loonexResults(page.body, page.url);
+}
+
 function searchResults(body) {
   const data = pageData(body);
   const payload = data.props ?? data;

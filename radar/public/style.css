@@ -117,3 +117,20 @@ dialog::backdrop { background: #080a08c9; }
   .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(119px, 1fr)); gap: 18px 10px; }
   .credits { align-items: flex-start; }
 }
+.loonex-items {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.5rem;
+  display: grid;
+  gap: .4rem;
+}
+.loonex-items li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .6rem;
+}
+.loonex-items li > span {
+  flex: 1 1 14rem;
+  font-weight: 600;
+}

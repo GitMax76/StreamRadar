@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { communityOrigin, titleProviders } from './community.mjs';
+import { communityOrigin, searchLoonex, titleProviders } from './community.mjs';
 
 const TMDB = 'https://api.themoviedb.org/3';
 const OMDB = 'https://www.omdbapi.com/';
@@ -582,6 +582,16 @@ const server = createServer(async (request, response) => {
       return response.end(asset.body);
     }
     if (path === '/healthz') return json(response, 200, { ok: true });
+    if (path === '/api/loonex') {
+      const query = (url.searchParams.get('q') || '').trim();
+      if (query.length < 2 || query.length > 120) throw new HttpError(400, 'Inserisci da 2 a 120 caratteri.');
+      try {
+        const items = await cached('loonex:' + query.toLowerCase(), 15 * MINUTE, () => searchLoonex(query));
+        return json(response, 200, { items });
+      } catch {
+        throw new HttpError(502, 'Ricerca LooneX non disponibile al momento.');
+      }
+    }
     const posterMatch = /^\/api\/poster\/(movie|tv)\/([1-9]\d{0,9})$/.exec(path);
     if (posterMatch && Number(posterMatch[2]) <= 2_147_483_647) {
       const data = await titleMetadata(posterMatch[1], posterMatch[2]);

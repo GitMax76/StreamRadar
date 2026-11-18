@@ -87,6 +87,25 @@ def loonex_episode(url):
     return None
 
 
+def loonex_listing(url):
+    parsed = urlsplit(url)
+    return (provider(url) == "LooneX" and parsed.scheme == "https" and parsed.port in (None, 443)
+            and parsed.username is None and parsed.password is None
+            and parsed.path in {"/lolirock", "/lolirock/"})
+
+
+def loonex_episodes(html):
+    found = {}
+    for link in Page(html).links:
+        url = urljoin("https://loonex.eu/lolirock/", link)
+        episode = loonex_episode(url)
+        if episode:
+            name, season, number = episode
+            episode_url = f"https://loonex.eu/lolirock/stream/ok/{season}x{number:02d}.php"
+            found[(season, number)] = entry(episode_url, name, season, number)
+    return [found[key] for key in sorted(found)]
+
+
 def resolve_loonex(url, timeout):
     name, season, number = loonex_episode(url)
     episode_url = f"https://loonex.eu/lolirock/stream/ok/{season}x{number:02d}.php"
@@ -142,6 +161,7 @@ def is_listing(url):
         (site == "AnimeUnity" and re.fullmatch(r"/anime/\d+(?:-[^/]+)?", path))
         or (site == "AnimeSaturn" and re.fullmatch(r"/anime/[^/]+", path))
         or (site == "Toonitalia" and re.fullmatch(r"/[^/]+", path))
+        or loonex_listing(url)
     )
 
 
@@ -150,6 +170,15 @@ def episodes(url, timeout=15):
     site = provider(url)
     if site == "Toonitalia":
         return toon_catalog(session, url, min(timeout, 7))
+    if site == "LooneX" and loonex_listing(url):
+        catalog_url = "https://loonex.eu/lolirock/"
+        html, final = sc._fetch(session, catalog_url, min(timeout, 10))
+        if not loonex_listing(final):
+            raise sc.PageFormatError("LooneX ha reindirizzato a una pagina diversa.")
+        items = loonex_episodes(html)
+        if not items:
+            raise sc.PageFormatError("Nessun episodio compatibile nel catalogo LooneX.")
+        return items
     if site == "AnimeUnity":
         parsed = urlsplit(url)
         anime_id = re.match(r"/anime/(\d+)", parsed.path)[1]
